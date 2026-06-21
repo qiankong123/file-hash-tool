@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件哈希对比工具 - MD5/SHA1/SHA256/SM3</title>
+    <!-- 外部资源 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 本地资源 -->
+    <link rel="stylesheet" href="css/style.css">
+    <script src="lib/spark-md5.min.js"></script>
+    <script src="lib/crypto-js.min.js"></script>
+    <script src="lib/sm3.min.js"></script>
+    
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#475569',
+                        success: '#10b981',
+                        danger: '#ef4444',
+                        warning: '#f59e0b',
+                        info: '#3b82f6',
+                        dark: '#1e293b',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 font-inter min-h-screen flex flex-col">
+    <!-- 顶部导航 -->
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 md:py-4 flex flex-col md:flex-row justify-between items-center">
+            <div class="flex items-center space-x-3 mb-3 md:mb-0">
+                <img src="assets/icons/logo.svg" alt="哈希工具logo" class="w-10 h-10">
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold text-dark">文件哈希对比工具</h1>
+                    <p class="text-xs text-gray-500 hidden md:block">支持MD5/SHA1/SHA256/SM3多种算法</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="hidden md:block bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-600">
+                    <i class="fa fa-shield text-primary mr-1"></i> 所有计算均在本地完成
+                </div>
+                <button id="clear-history" class="btn-danger text-sm px-3 py-1">
+                    <i class="fa fa-trash mr-1"></i> 清空历史
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 广告位1 - 顶部横幅 -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 py-2 border-b border-gray-200">
+        <div class="container mx-auto px-4">
+            <div class="ad-banner flex justify-center items-center h-12 md:h-16 bg-white rounded-lg shadow-sm border border-gray-200">
+                <!-- 广告预留位置 -->
+                <span class="text-gray-400 text-sm">【广告位】点击查看更多优质工具 →</span>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-grow container mx-auto px-4 py-6 md:py-8">
+        <!-- 算法选择器 -->
+        <div class="mb-6 bg-white rounded-xl p-4 shadow-md">
+            <div class="flex flex-col md:flex-row items-center justify-between">
+                <h2 class="text-lg font-semibold text-dark mb-3 md:mb-0">
+                    <i class="fa fa-cogs text-primary mr-2"></i> 选择哈希算法
+                </h2>
+                <div class="flex flex-wrap gap-2">
+                    <button class="algorithm-btn active px-4 py-2 rounded-lg bg-primary text-white" data-algorithm="md5">
+                        MD5
+                    </button>
+                    <button class="algorithm-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300" data-algorithm="sha1">
+                        SHA-1
+                    </button>
+                    <button class="algorithm-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300" data-algorithm="sha256">
+                        SHA-256
+                    </button>
+                    <button class="algorithm-btn px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300" data-algorithm="sm3">
+                        SM3
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能切换标签 -->
+        <div class="mb-6 border-b border-gray-200">
+            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center" id="tab-list" role="tablist">
+                <li class="mr-2" role="presentation">
+                    <button class="tab-btn active inline-block p-4 border-b-2 border-primary text-primary rounded-t-lg" id="compare-tab" data-tabs-target="#compare-section">
+                        <i class="fa fa-exchange mr-1"></i> 文件对比
+                    </button>
+                </li>
+                <li class="mr-2" role="presentation">
+                    <button class="tab-btn inline-block p-4 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 rounded-t-lg" id="list-tab" data-tabs-target="#list-section">
+                        <i class="fa fa-list mr-1"></i> 文件列表
+                    </button>
+                </li>
+                <li role="presentation">
+                    <button class="tab-btn inline-block p-4 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 rounded-t-lg" id="history-tab" data-tabs-target="#history-section">
+                        <i class="fa fa-history mr-1"></i> 历史记录
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 广告位2 - 侧边栏（移动端隐藏） -->
+        <div class="flex flex-col lg:flex-row gap-6">
+            <div class="lg:w-3/4">
+                <!-- 文件对比区域 -->
+                <section id="compare-section" class="tab-content active">
+                    <div class="grid md:grid-cols-2 gap-6 mb-6">
+                        <!-- 文件1上传区域 -->
+                        <div class="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100">
+                            <div class="flex items-center mb-4">
+                                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                    <i class="fa fa-file-o text-primary text-xl"></i>
+                                </div>
+                                <h2 class="text-lg font-semibold text-dark">文件 1</h2>
+                            </div>
+                            
+                            <div id="file1-drop-area" class="file-drop-area mb-5">
+                                <input type="file" id="file1-input" class="hidden" accept="*">
+                                <div class="flex flex-col items-center">
+                                    <img src="assets/icons/upload.svg" alt="上传文件" class="w-16 h-16 mb-3 text-gray-300">
+                                    <button type="button" id="file1-select" class="btn-primary mb-3 px-6 py-2 rounded-lg">
+                                        <i class="fa fa-upload mr-2"></i> 选择文件
+                                    </button>
+                                    <p class="text-gray-500 text-sm">或拖放文件到此处</p>
+                                </div>
+                            </div>
+                            
+                            <div id="file1-info" class="hidden">
+                                <div class="flex items-center justify-between mb-3 p-3 bg-gray-50 rounded-lg">
+                                    <span id="file1-name" class="font-medium text-gray-800 truncate"></span>
+                                    <span id="file1-size" class="text-sm text-gray-600"></span>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <div class="flex justify-between text-sm text-gray-600 mb-1">
+                                        <span>计算进度</span>
+                                        <span id="file1-progress-text">0%</span>
+                                    </div>
+                                    <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div id="file1-progress" class="h-full bg-primary transition-all duration-300" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <p class="text-sm font-medium text-gray-700">
+                                            <span id="file1-algorithm-name">MD5</span> 值：
+                                        </p>
+                                        <button id="copy-file1-hash" class="text-primary hover:text-primary/80 transition-colors">
+                                            <i class="fa fa-copy"></i> 复制
+                                        </button>
+                                    </div>
+                                    <code id="file1-hash" class="font-mono text-sm bg-white p-3 rounded block break-all border border-gray-200"></code>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 文件2上传区域 -->
+                        <div class="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300 border border-gray-100">
+                            <div class="flex items-center mb-4">
+                                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                    <i class="fa fa-file-o text-primary text-xl"></i>
+                                </div>
+                                <h2 class="text-lg font-semibold text-dark">文件 2</h2>
+                            </div>
+                            
+                            <div id="file2-drop-area" class="file-drop-area mb-5">
+                                <input type="file" id="file2-input" class="hidden" accept="*">
+                                <div class="flex flex-col items-center">
+                                    <img src="assets/icons/upload.svg" alt="上传文件" class="w-16 h-16 mb-3 text-gray-300">
+                                    <button type="button" id="file2-select" class="btn-primary mb-3 px-6 py-2 rounded-lg">
+                                        <i class="fa fa-upload mr-2"></i> 选择文件
+                                    </button>
+                                    <p class="text-gray-500 text-sm">或拖放文件到此处</p>
+                                </div>
+                            </div>
+                            
+                            <div id="file2-info" class="hidden">
+                                <div class="flex items-center justify-between mb-3 p-3 bg-gray-50 rounded-lg">
+                                    <span id="file2-name" class="font-medium text-gray-800 truncate"></span>
+                                    <span id="file2-size" class="text-sm text-gray-600"></span>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <div class="flex justify-between text-sm text-gray-600 mb-1">
+                                        <span>计算进度</span>
+                                        <span id="file2-progress-text">0%</span>
+                                    </div>
+                                    <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div id="file2-progress" class="h-full bg-primary transition-all duration-300" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <p class="text-sm font-medium text-gray-700">
+                                            <span id="file2-algorithm-name">MD5</span> 值：
+                                        </p>
+                                        <button id="copy-file2-hash" class="text-primary hover:text-primary/80 transition-colors">
+                                            <i class="fa fa-copy"></i> 复制
+                                        </button>
+                                    </div>
+                                    <code id="file2-hash" class="font-mono text-sm bg-white p-3 rounded block break-all border border-gray-200"></code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 对比结果 -->
+                    <div id="comparison-result" class="bg-white rounded-xl p-6 shadow-lg hidden border border-gray-100">
+                        <div class="flex items-center mb-4">
+                            <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                <i class="fa fa-balance-scale text-primary text-xl"></i>
+                            </div>
+                            <h2 class="text-lg font-semibold text-dark">对比结果</h2>
+                        </div>
+                        
+                        <div id="result-content" class="p-6 rounded-lg text-center text-xl font-medium min-h-[100px] flex items-center justify-center">
+                            <!-- 结果会动态生成 -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 文件列表区域 -->
+                <section id="list-section" class="tab-content hidden">
+                    <div class="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-6">
+                            <div class="flex items-center mb-4 md:mb-0">
+                                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                    <i class="fa fa-list text-primary text-xl"></i>
+                                </div>
+                                <h2 class="text-lg font-semibold text-dark">已上传文件列表</h2>
+                            </div>
+                            <button id="add-file" class="btn-primary px-6 py-2 rounded-lg">
+                                <i class="fa fa-plus mr-2"></i> 添加文件
+                            </button>
+                        </div>
+                        
+                        <input type="file" id="list-file-input" class="hidden" accept="*" multiple>
+                        
+                        <div id="empty-list" class="py-16 text-center">
+                            <img src="assets/images/empty-state.png" alt="暂无文件" class="w-32 h-32 mx-auto mb-4 opacity-50">
+                            <p class="text-gray-500 text-lg">暂无文件，请上传文件查看哈希值列表</p>
+                            <p class="text-gray-400 mt-2">支持 MD5、SHA1、SHA256、SM3 多种算法</p>
+                        </div>
+                        
+                        <div id="files-list" class="overflow-x-auto hidden">
+                            <table class="w-full text-sm text-left">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-4 rounded-l-lg">文件名</th>
+                                        <th scope="col" class="px-6 py-4">文件大小</th>
+                                        <th scope="col" class="px-6 py-4">
+                                            <span id="list-algorithm-name">MD5</span> 值
+                                        </th>
+                                        <th scope="col" class="px-6 py-4 rounded-r-lg text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="files-table-body">
+                                    <!-- 列表项会动态生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 历史记录区域 -->
+                <section id="history-section" class="tab-content hidden">
+                    <div class="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+                        <div class="flex items-center mb-6">
+                            <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                <i class="fa fa-history text-primary text-xl"></i>
+                            </div>
+                            <h2 class="text-lg font-semibold text-dark">历史记录</h2>
+                        </div>
+                        
+                        <div id="empty-history" class="py-16 text-center">
+                            <img src="assets/images/empty-state.png" alt="暂无历史记录" class="w-32 h-32 mx-auto mb-4 opacity-50">
+                            <p class="text-gray-500 text-lg">暂无历史记录</p>
+                            <p class="text-gray-400 mt-2">上传文件后会自动保存计算记录</p>
+                        </div>
+                        
+                        <div id="history-list" class="overflow-x-auto hidden">
+                            <table class="w-full text-sm text-left">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-4 rounded-l-lg">文件名</th>
+                                        <th scope="col" class="px-6 py-4">文件大小</th>
+                                        <th scope="col" class="px-6 py-4">
+                                            <span id="history-algorithm-name">MD5</span> 值
+                                        </th>
+                                        <th scope="col" class="px-6 py-4">上传时间</th>
+                                        <th scope="col" class="px-6 py-4 rounded-r-lg text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-table-body">
+                                    <!-- 历史记录会动态生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 侧边栏广告位 -->
+            <div class="lg:w-1/4 hidden lg:block">
+                <div class="sticky top-24">
+                    <div class="bg-white rounded-xl shadow-lg p-4 mb-6 border border-gray-100">
+                        <h3 class="text-sm font-medium text-gray-500 mb-3">热门推荐</h3>
+                        <div class="ad-sidebar space-y-4">
+                            <!-- 广告项1 -->
+                            <div class="rounded-lg overflow-hidden border border-gray-200 hover:shadow-md transition-shadow">
+                                <img src="assets/images/banner-placeholder.jpg" alt="广告图片" class="w-full h-40 object-cover">
+                                <div class="p-3">
+                                    <h4 class="font-medium text-gray-800">哈希工具专业版</h4>
+                                    <p class="text-xs text-gray-500 mt-1">更多高级功能，批量处理</p>
+                                    <button class="mt-2 text-xs bg-primary/10 text-primary px-3 py-1 rounded-full">了解更多</button>
+                                </div>
+                            </div>
+                            
+                            <!-- 广告项2 -->
+                            <div class="rounded-lg overflow-hidden border border-gray-200 hover:shadow-md transition-shadow">
+                                <img src="assets/images/banner-placeholder.jpg" alt="广告图片" class="w-full h-40 object-cover">
+                                <div class="p-3">
+                                    <h4 class="font-medium text-gray-800">文件安全检测工具</h4>
+                                    <p class="text-xs text-gray-500 mt-1">检测文件完整性，防止篡改</p>
+                                    <button class="mt-2 text-xs bg-primary/10 text-primary px-3 py-1 rounded-full">立即体验</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 算法说明 -->
+                    <div class="bg-white rounded-xl shadow-lg p-4 border border-gray-100">
+                        <h3 class="font-medium text-gray-800 mb-3">哈希算法说明</h3>
+                        <div class="space-y-3 text-sm">
+                            <div>
+                                <span class="font-medium text-primary">MD5：</span>
+                                <span class="text-gray-600">128位哈希值，广泛用于文件校验</span>
+                            </div>
+                            <div>
+                                <span class="font-medium text-primary">SHA-1：</span>
+                                <span class="text-gray-600">160位哈希值，安全性高于MD5</span>
+                            </div>
+                            <div>
+                                <span class="font-medium text-primary">SHA-256：</span>
+                                <span class="text-gray-600">256位哈希值，目前最常用的安全哈希算法</span>
+                            </div>
+                            <div>
+                                <span class="font-medium text-primary">SM3：</span>
+                                <span class="text-gray-600">国密哈希算法，适用于中国密码标准</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 广告位3 - 底部横幅 -->
+    <div class="bg-gray-50 py-4 border-t border-gray-200">
+        <div class="container mx-auto px-4">
+            <div class="ad-banner-bottom flex justify-center items-center h-16 bg-white rounded-lg shadow-sm border border-gray-200">
+                <!-- 广告预留位置 -->
+                <span class="text-gray-400 text-sm">【底部广告位】联系我们投放广告 →</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 页脚 -->
+    <footer class="bg-white py-6 border-t border-gray-200 mt-auto">
+        <div class="container mx-auto px-4 text-center">
+            <div class="flex flex-col md:flex-row justify-center items-center space-y-3 md:space-y-0 md:space-x-6 mb-4">
+                <a href="#" class="text-gray-600 hover:text-primary text-sm">关于我们</a>
+                <a href="#" class="text-gray-600 hover:text-primary text-sm">使用帮助</a>
+                <a href="#" class="text-gray-600 hover:text-primary text-sm">隐私政策</a>
+                <a href="#" class="text-gray-600 hover:text-primary text-sm">联系客服</a>
+            </div>
+            <p class="text-gray-500 text-sm">文件哈希对比工具 | 所有计算均在客户端完成，文件不会上传到服务器</p>
+            <p class="text-gray-400 text-xs mt-2">© 2025 文件哈希对比工具 - 保护您的文件安全</p>
+        </div>
+    </footer>
+
+    <!-- 提示框 -->
+    <div id="toast" class="fixed bottom-6 right-6 p-4 rounded-lg shadow-xl transform translate-y-20 opacity-0 transition-all duration-300 z-50 hidden flex items-center max-w-xs">
+        <i id="toast-icon" class="mr-2 text-xl"></i>
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- JavaScript 文件 -->
+    <script src="js/ui-utils.js"></script>
+    <script src="js/hash-calculator.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
